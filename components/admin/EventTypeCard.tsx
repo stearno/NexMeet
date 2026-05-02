@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { toggleActive, deleteEventType } from "@/server-actions/event-types";
-import { Copy, Pencil, Trash2, Check } from "lucide-react";
+import { toggleActive, deleteEventType, duplicateEventType } from "@/server-actions/event-types";
+import { Link as LinkIcon, Copy, Check, Pencil, Trash2 } from "lucide-react";
 
 const colorMap: Record<string, string> = {
   iris: "var(--event-iris)",
@@ -41,7 +41,7 @@ export function EventTypeCard({
   const [copied, setCopied] = useState(false);
   const link = `${appUrl}/${slug}`;
 
-  function copy() {
+  function copyLink() {
     navigator.clipboard.writeText(link).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
@@ -84,14 +84,28 @@ export function EventTypeCard({
             {active ? "Live" : "Hidden"}
           </span>
           <div className="flex items-center gap-0.5 opacity-60 transition-opacity duration-150 group-hover:opacity-100">
+            <div className="group/copy relative">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={copyLink}
+                aria-label={copied ? "Link Copied" : "Copy Link"}
+              >
+                {copied ? <Check size={13} className="text-success" /> : <LinkIcon size={13} />}
+              </Button>
+              <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-ink px-1.5 py-0.5 font-mono text-[10px] text-bg opacity-0 transition-opacity duration-150 group-hover/copy:opacity-100">
+                {copied ? "Link Copied" : "Copy Link"}
+              </span>
+            </div>
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={copy}
-              title={copied ? "Copied" : "Copy link"}
-              aria-label="Copy link"
+              title="Duplicate"
+              aria-label="Duplicate"
+              onClick={() => start(() => duplicateEventType(id))}
+              disabled={pending}
             >
-              {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+              <Copy size={13} />
             </Button>
             <Button
               nativeButton={false}

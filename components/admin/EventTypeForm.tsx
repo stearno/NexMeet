@@ -1,7 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Plus, Trash2, Check } from "lucide-react";
+import { Loader2, Plus, Trash2, Check, Send, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { EventTypeDoc, EventColor, CustomQuestion, LocationSpec } from "@/lib/types";
-import { createEventType, updateEventType } from "@/server-actions/event-types";
+import { createEventType, updateEventType, testWebhook } from "@/server-actions/event-types";
 
 type FormState = {
   slug: string;
@@ -48,6 +65,113 @@ function Section({
   );
 }
 
+function SortableQuestionCard({
+  q,
+  idx,
+  state,
+  setState,
+  removeQuestion,
+}: {
+  q: CustomQuestion;
+  idx: number;
+  state: FormState;
+  setState: React.Dispatch<React.SetStateAction<FormState>>;
+  removeQuestion: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: q.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="space-y-3 rounded-lg border border-border bg-surface p-4">
+      <div className="mb-1 flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[10px] text-ink-faint">ID:</span>
+          <span className="font-mono text-[10px] text-ink-muted select-all">{q.id}</span>
+        </div>
+        <button
+          type="button"
+          className="cursor-grab touch-none text-ink-faint hover:text-ink-muted active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+          aria-label="Drag to reorder"
+        >
+          <GripVertical size={15} />
+        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Input
+          placeholder="Label"
+          value={q.label}
+          onChange={(e) => {
+            const next = [...state.customQuestions];
+            next[idx] = { ...q, label: e.target.value } as CustomQuestion;
+            setState((s) => ({ ...s, customQuestions: next }));
+          }}
+        />
+        <select
+          value={q.type}
+          onChange={(e) => {
+            const t = e.target.value as CustomQuestion["type"];
+            const base = { id: q.id, label: q.label, required: q.required };
+            const next = [...state.customQuestions];
+            next[idx] =
+              t === "select" || t === "multi_select"
+                ? { ...base, type: t, options: ["Option 1"] }
+                : { ...base, type: t };
+            setState((s) => ({ ...s, customQuestions: next }));
+          }}
+          className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-ink outline-none transition-colors duration-150 hover:border-border-strong focus:border-primary focus:ring-2 focus:ring-ring"
+        >
+          <option value="short_text">Short text</option>
+          <option value="long_text">Long text</option>
+          <option value="select">Dropdown</option>
+          <option value="multi_select">Multi-select</option>
+        </select>
+        <label className="inline-flex items-center gap-2 text-[13px]">
+          <Switch
+            checked={q.required}
+            onCheckedChange={(checked) => {
+              const next = [...state.customQuestions];
+              next[idx] = { ...q, required: checked };
+              setState((s) => ({ ...s, customQuestions: next }));
+            }}
+          />
+          <span className="text-ink-soft">Required</span>
+        </label>
+      </div>
+      {(q.type === "select" || q.type === "multi_select") && (
+        <Textarea
+          rows={2}
+          placeholder="One option per line"
+          value={q.options.join("\n")}
+          onChange={(e) => {
+            const next = [...state.customQuestions];
+            next[idx] = { ...q, options: e.target.value.split(/\n/) };
+            setState((s) => ({ ...s, customQuestions: next }));
+          }}
+          className="font-mono text-[13px]"
+        />
+      )}
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => removeQuestion(q.id)}
+          className="gap-1 text-danger hover:text-danger"
+        >
+          <Trash2 />
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function EventTypeForm({
   existingId,
   initial,
@@ -76,6 +200,8 @@ export function EventTypeForm({
     },
   );
   const [pending, start] = useTransition();
+  const [webhookTest, setWebhookTest] = useState<{ ok: boolean; status: number | null; error?: string } | null>(null);
+  const [testingWebhook, startTestingWebhook] = useTransition();
 
   function patch<K extends keyof FormState>(key: K, value: FormState[K]) {
     setState((s) => ({ ...s, [key]: value }));
@@ -102,9 +228,33 @@ export function EventTypeForm({
     setState((s) => ({ ...s, customQuestions: s.customQuestions.filter((q) => q.id !== id) }));
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setState((s) => {
+      const ids = s.customQuestions.map((q) => q.id);
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
+      return { ...s, customQuestions: arrayMove(s.customQuestions, oldIndex, newIndex) };
+    });
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   function submit() {
     const fd = new FormData();
-    fd.append("payload", JSON.stringify(state));
+    const cleanState = {
+      ...state,
+      customQuestions: state.customQuestions.map((q) =>
+        q.type === "select" || q.type === "multi_select"
+          ? { ...q, options: q.options.map((o) => o.trim()).filter(Boolean) }
+          : q,
+      ),
+    };
+    fd.append("payload", JSON.stringify(cleanState));
     start(() => {
       (async () => {
         if (existingId) await updateEventType(existingId, fd);
@@ -133,7 +283,16 @@ export function EventTypeForm({
               <Input
                 id="slug"
                 value={state.slug}
-                onChange={(e) => patch("slug", e.target.value.toLowerCase())}
+                onChange={(e) =>
+                  patch(
+                    "slug",
+                    e.target.value
+                      .toLowerCase()
+                      .replace(/\s+/g, "-")
+                      .replace(/[^a-z0-9-]/g, "")
+                      .replace(/^-+|-+$/g, ""),
+                  )
+                }
                 placeholder="discovery"
                 className="font-mono"
               />
@@ -337,88 +496,25 @@ export function EventTypeForm({
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {state.customQuestions.map((q, idx) => (
-              <div key={q.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
-                <div className="mb-1 flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] text-ink-faint">ID:</span>
-                  <span className="font-mono text-[10px] text-ink-muted select-all">{q.id}</span>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <Input
-                    placeholder="Label"
-                    value={q.label}
-                    onChange={(e) => {
-                      const next = [...state.customQuestions];
-                      next[idx] = { ...q, label: e.target.value } as CustomQuestion;
-                      setState((s) => ({ ...s, customQuestions: next }));
-                    }}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext
+              items={state.customQuestions.map((q) => q.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-3">
+                {state.customQuestions.map((q, idx) => (
+                  <SortableQuestionCard
+                    key={q.id}
+                    q={q}
+                    idx={idx}
+                    state={state}
+                    setState={setState}
+                    removeQuestion={removeQuestion}
                   />
-                  <select
-                    value={q.type}
-                    onChange={(e) => {
-                      const t = e.target.value as CustomQuestion["type"];
-                      const base = { id: q.id, label: q.label, required: q.required };
-                      const next = [...state.customQuestions];
-                      next[idx] =
-                        t === "select" || t === "multi_select"
-                          ? { ...base, type: t, options: ["Option 1"] }
-                          : { ...base, type: t };
-                      setState((s) => ({ ...s, customQuestions: next }));
-                    }}
-                    className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-ink outline-none transition-colors duration-150 hover:border-border-strong focus:border-primary focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="short_text">Short text</option>
-                    <option value="long_text">Long text</option>
-                    <option value="select">Dropdown</option>
-                    <option value="multi_select">Multi-select</option>
-                  </select>
-                  <label className="inline-flex items-center gap-2 text-[13px]">
-                    <Switch
-                      checked={q.required}
-                      onCheckedChange={(checked) => {
-                        const next = [...state.customQuestions];
-                        next[idx] = { ...q, required: checked };
-                        setState((s) => ({ ...s, customQuestions: next }));
-                      }}
-                    />
-                    <span className="text-ink-soft">Required</span>
-                  </label>
-                </div>
-                {(q.type === "select" || q.type === "multi_select") && (
-                  <Textarea
-                    rows={2}
-                    placeholder="One option per line"
-                    value={q.options.join("\n")}
-                    onChange={(e) => {
-                      const next = [...state.customQuestions];
-                      next[idx] = {
-                        ...q,
-                        options: e.target.value
-                          .split(/\n/)
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      };
-                      setState((s) => ({ ...s, customQuestions: next }));
-                    }}
-                    className="font-mono text-[13px]"
-                  />
-                )}
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeQuestion(q.id)}
-                    className="gap-1 text-danger hover:text-danger"
-                  >
-                    <Trash2 />
-                    Remove
-                  </Button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
       </Section>
 
@@ -448,6 +544,36 @@ export function EventTypeForm({
               className="font-mono text-[13px]"
             />
           </div>
+          {state.webhook && (
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={testingWebhook}
+                onClick={() => {
+                  setWebhookTest(null);
+                  startTestingWebhook(async () => {
+                    const result = await testWebhook(state.webhook!.url);
+                    setWebhookTest(result);
+                  });
+                }}
+                className="gap-1.5"
+              >
+                {testingWebhook ? <Loader2 className="animate-spin" /> : <Send />}
+                Send test
+              </Button>
+              {webhookTest && (
+                <span
+                  className={`font-mono text-[12px] ${webhookTest.ok ? "text-success" : "text-danger"}`}
+                >
+                  {webhookTest.ok
+                    ? `✓ ${webhookTest.status} OK`
+                    : webhookTest.error ?? `✗ ${webhookTest.status ?? "No response"}`}
+                </span>
+              )}
+            </div>
+          )}
           {state.webhook && (
             <div className="space-y-2">
               <Label>Trigger events</Label>
