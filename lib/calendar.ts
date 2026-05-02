@@ -141,6 +141,7 @@ export interface CreateEventInput {
   durationMinutes: number;
   attendees: Array<{ email: string; displayName?: string }>;
   withMeet: boolean;
+  guestTimezone?: string;
 }
 
 export interface CreatedEvent {
@@ -162,7 +163,7 @@ export async function createCalendarEvent(
       summary: input.summary,
       description: input.description,
       start_datetime: input.startUtc.toISOString(),
-      timezone: "UTC",
+      timezone: input.guestTimezone ?? "UTC",
       event_duration_hour: hours,
       event_duration_minutes: minutes,
       attendees: input.attendees.map((a) => a.email),

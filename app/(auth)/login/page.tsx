@@ -1,8 +1,7 @@
-import { Suspense } from "react";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { LoginForm } from "./login-form";
 
-export const metadata = { title: "Sign in · Kalendly" };
+export const metadata = { title: "Sign in · PROCESS4HIGHROI" };
 
 export default function LoginPage() {
   return (
@@ -14,9 +13,7 @@ export default function LoginPage() {
         </p>
       </div>
       <div className="rounded-xl border border-border bg-surface p-7 shadow-[0_1px_2px_rgba(15,15,20,0.04)]">
-        <Suspense fallback={null}>
-          <LoginForm />
-        </Suspense>
+        <LoginForm />
       </div>
       <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.1em] text-ink-faint">
         Authorized access only

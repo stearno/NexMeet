@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kalendly",
+  title: "PROCESS4HIGHROI",
   description: "Schedule a meeting.",
   icons: { icon: "/icon.svg" },
   manifest: "/manifest.json",
@@ -23,8 +23,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#7C5CF6" },
-    { media: "(prefers-color-scheme: dark)", color: "#A88AFA" },
+    { media: "(prefers-color-scheme: light)", color: "#003366" },
+    { media: "(prefers-color-scheme: dark)", color: "#4D88CC" },
   ],
 };
 

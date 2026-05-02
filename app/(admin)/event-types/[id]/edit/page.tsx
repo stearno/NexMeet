@@ -21,6 +21,7 @@ export default async function EditEventType({ params }: { params: Promise<{ id: 
     location: evt.location,
     rules: evt.rules,
     customQuestions: evt.customQuestions,
+    webhook: evt.webhook,
     active: evt.active,
   };
 

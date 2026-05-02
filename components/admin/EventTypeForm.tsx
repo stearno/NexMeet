@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { EventTypeDoc, EventColor, CustomQuestion, LocationSpec } from "@/lib/types";
 import { createEventType, updateEventType } from "@/server-actions/event-types";
 
@@ -19,10 +20,11 @@ type FormState = {
   location: LocationSpec;
   rules: EventTypeDoc["rules"];
   customQuestions: CustomQuestion[];
+  webhook: EventTypeDoc["webhook"];
   active: boolean;
 };
 
-const colors: EventColor[] = ["iris", "rose", "amber", "sage", "slate"];
+const colors: EventColor[] = ["iris", "rose", "amber", "sage", "slate", "blue"];
 
 function Section({
   title,
@@ -69,6 +71,7 @@ export function EventTypeForm({
         maxBookingsPerDay: null,
       },
       customQuestions: [],
+      webhook: null,
       active: true,
     },
   );
@@ -102,9 +105,11 @@ export function EventTypeForm({
   function submit() {
     const fd = new FormData();
     fd.append("payload", JSON.stringify(state));
-    start(async () => {
-      if (existingId) await updateEventType(existingId, fd);
-      else await createEventType(fd);
+    start(() => {
+      (async () => {
+        if (existingId) await updateEventType(existingId, fd);
+        else await createEventType(fd);
+      })();
     });
   }
 
@@ -335,6 +340,10 @@ export function EventTypeForm({
           <div className="space-y-3">
             {state.customQuestions.map((q, idx) => (
               <div key={q.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span className="font-mono text-[10px] text-ink-faint">ID:</span>
+                  <span className="font-mono text-[10px] text-ink-muted select-all">{q.id}</span>
+                </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Input
                     placeholder="Label"
@@ -352,8 +361,8 @@ export function EventTypeForm({
                       const base = { id: q.id, label: q.label, required: q.required };
                       const next = [...state.customQuestions];
                       next[idx] =
-                        t === "select"
-                          ? { ...base, type: "select", options: ["Option 1"] }
+                        t === "select" || t === "multi_select"
+                          ? { ...base, type: t, options: ["Option 1"] }
                           : { ...base, type: t };
                       setState((s) => ({ ...s, customQuestions: next }));
                     }}
@@ -362,6 +371,7 @@ export function EventTypeForm({
                     <option value="short_text">Short text</option>
                     <option value="long_text">Long text</option>
                     <option value="select">Dropdown</option>
+                    <option value="multi_select">Multi-select</option>
                   </select>
                   <label className="inline-flex items-center gap-2 text-[13px]">
                     <Switch
@@ -375,7 +385,7 @@ export function EventTypeForm({
                     <span className="text-ink-soft">Required</span>
                   </label>
                 </div>
-                {q.type === "select" && (
+                {(q.type === "select" || q.type === "multi_select") && (
                   <Textarea
                     rows={2}
                     placeholder="One option per line"
@@ -410,6 +420,65 @@ export function EventTypeForm({
             ))}
           </div>
         )}
+      </Section>
+
+      <div className="border-t border-border" />
+
+      <Section
+        title="Webhook"
+        description="Send a POST request when booking actions occur."
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="webhook-url">Webhook URL</Label>
+            <Input
+              id="webhook-url"
+              type="url"
+              placeholder="https://hooks.example.com/..."
+              value={state.webhook?.url ?? ""}
+              onChange={(e) => {
+                const url = e.target.value;
+                setState((s) => ({
+                  ...s,
+                  webhook: url
+                    ? { url, events: s.webhook?.events ?? ["created", "cancelled", "rescheduled"] }
+                    : null,
+                }));
+              }}
+              className="font-mono text-[13px]"
+            />
+          </div>
+          {state.webhook && (
+            <div className="space-y-2">
+              <Label>Trigger events</Label>
+              <div className="space-y-2">
+                {(["created", "cancelled", "rescheduled"] as const).map((evt) => (
+                  <label key={evt} className="flex items-center gap-2.5 cursor-pointer">
+                    <Checkbox
+                      checked={state.webhook?.events.includes(evt) ?? false}
+                      onCheckedChange={(checked) => {
+                        setState((s) => {
+                          const current = s.webhook?.events ?? [];
+                          const next = checked
+                            ? [...current, evt]
+                            : current.filter((e) => e !== evt);
+                          return {
+                            ...s,
+                            webhook: s.webhook ? { ...s.webhook, events: next } : null,
+                          };
+                        });
+                      }}
+                    />
+                    <span className="text-[13px] text-ink-soft capitalize">{evt}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="text-[11.5px] text-ink-muted">
+            Payload includes: event type, booking details, guest info, custom answers, and meeting link.
+          </p>
+        </div>
       </Section>
 
       <div className="border-t border-border" />

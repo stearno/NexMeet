@@ -20,7 +20,14 @@ export const customQuestionSchema = z.discriminatedUnion("type", [
     label: z.string().min(1).max(120),
     type: z.literal("select"),
     required: z.boolean(),
-    options: z.array(z.string().min(1).max(80)).min(1).max(20),
+    options: z.array(z.string().min(1).max(200)).min(1).max(20),
+  }),
+  z.object({
+    id: z.string().min(1),
+    label: z.string().min(1).max(120),
+    type: z.literal("multi_select"),
+    required: z.boolean(),
+    options: z.array(z.string().min(1).max(200)).min(1).max(20),
   }),
 ]);
 
@@ -45,6 +52,10 @@ export const eventTypeFormSchema = z.object({
     maxBookingsPerDay: z.number().int().min(1).max(50).nullable(),
   }),
   customQuestions: z.array(customQuestionSchema).max(20),
+  webhook: z.object({
+    url: z.string().url().max(500),
+    events: z.array(z.enum(["created", "cancelled", "rescheduled"])).min(1),
+  }).nullable(),
   active: z.boolean(),
 });
 
@@ -88,5 +99,5 @@ export const bookingRequestSchema = z.object({
   guestName: z.string().min(1).max(80),
   guestEmail: z.email().max(254),
   guestTimezone: z.string().min(1),
-  customAnswers: z.record(z.string(), z.string().max(2000)),
+  customAnswers: z.record(z.string(), z.union([z.string().max(2000), z.array(z.string().max(2000))])),
 });

@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import { listCalendars } from "@/lib/calendar";
 import { ProfileSection, GoogleSection } from "@/components/admin/SettingsSections";
 import { AppearanceSection } from "@/components/admin/AppearanceSection";
+import { ApiKeySection } from "@/components/admin/ApiKeySection";
 
 function SettingsCard({
   title,
@@ -89,6 +90,15 @@ export default async function SettingsPage() {
           selectedId={integ?.calendarId ?? null}
           error={calError}
         />
+      </SettingsCard>
+
+      <div className="border-t border-border" />
+
+      <SettingsCard
+        title="API Access"
+        description="Create bookings programmatically via API."
+      >
+        <ApiKeySection hasKey={!!user.apiKeyHash} />
       </SettingsCard>
 
       <div className="border-t border-border" />

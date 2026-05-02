@@ -18,6 +18,7 @@ export async function bootstrap() {
       name: "Admin",
       bio: null,
       defaultTimezone: "UTC",
+      apiKeyHash: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

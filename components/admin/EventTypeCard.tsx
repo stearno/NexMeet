@@ -13,6 +13,7 @@ const colorMap: Record<string, string> = {
   amber: "var(--event-amber)",
   sage: "var(--event-sage)",
   slate: "var(--event-slate)",
+  blue: "var(--event-blue)",
 };
 
 interface Props {

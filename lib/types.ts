@@ -1,10 +1,11 @@
 import type { ObjectId } from "mongodb";
 
-export type EventColor = "iris" | "rose" | "amber" | "sage" | "slate";
+export type EventColor = "iris" | "rose" | "amber" | "sage" | "slate" | "blue";
 
 export type CustomQuestion =
   | { id: string; label: string; type: "short_text" | "long_text"; required: boolean }
-  | { id: string; label: string; type: "select"; required: boolean; options: string[] };
+  | { id: string; label: string; type: "select"; required: boolean; options: string[] }
+  | { id: string; label: string; type: "multi_select"; required: boolean; options: string[] };
 
 export type LocationSpec =
   | { type: "google_meet" }
@@ -17,6 +18,7 @@ export interface UserDoc {
   name: string;
   bio: string | null;
   defaultTimezone: string;
+  apiKeyHash: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,10 +54,26 @@ export interface EventTypeDoc {
     maxBookingsPerDay: number | null;
   };
   customQuestions: CustomQuestion[];
+  webhook: {
+    url: string;
+    events: Array<"created" | "cancelled" | "rescheduled">;
+  } | null;
   active: boolean;
   position: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface WebhookLogDoc {
+  _id: ObjectId;
+  eventTypeSlug: string;
+  bookingId: ObjectId;
+  event: string;
+  url: string;
+  payload: Record<string, unknown>;
+  statusCode: number | null;
+  success: boolean;
+  createdAt: Date;
 }
 
 export interface AvailabilityDoc {
@@ -82,7 +100,7 @@ export interface BookingDoc {
   guestName: string;
   guestEmail: string;
   guestTimezone: string;
-  customAnswers: Record<string, string>;
+  customAnswers: Record<string, string | string[]>;
   startUtc: Date;
   endUtc: Date;
   googleEventId: string;

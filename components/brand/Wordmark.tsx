@@ -1,3 +1,5 @@
+"use client";
+
 import { Mark } from "./Mark";
 
 interface Props {
@@ -12,19 +14,19 @@ export function Wordmark({ size = 22, className, tone = "default" }: Props) {
     <span
       className={"inline-flex items-center leading-none " + (className ?? "")}
       style={{ color, height: size }}
-      aria-label="Kalendly"
+      aria-label="PROCESS4HIGHROI"
     >
       <Mark size={size} />
       <span
         style={{
-          fontWeight: 600,
+          fontWeight: 700,
           letterSpacing: "-0.04em",
-          fontSize: Math.round(size * 0.86),
+          fontSize: Math.round(size * 0.72),
           lineHeight: 1,
-          marginLeft: -Math.round(size * 0.16),
+          marginLeft: Math.round(size * 0.1),
         }}
       >
-        alendly
+        PROCESS4HIGHROI
       </span>
     </span>
   );

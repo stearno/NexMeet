@@ -21,21 +21,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-        if (parsed.data.email !== env().ADMIN_EMAIL) return null;
-        if (parsed.data.password !== env().ADMIN_PASSWORD) return null;
+        if (!parsed.success) {
+          console.log("[auth] schema parse failed");
+          return null;
+        }
+        const adminEmail = env().ADMIN_EMAIL;
+        const adminPassword = env().ADMIN_PASSWORD;
+        if (parsed.data.email !== adminEmail) return null;
+        if (parsed.data.password !== adminPassword) return null;
 
-        await bootstrap();
-        const user = await (await users()).findOne({ email: parsed.data.email });
-        if (!user) return null;
+        try {
+          await bootstrap();
+          const user = await (await users()).findOne({ email: parsed.data.email });
+          if (user) return { id: user._id.toString(), email: user.email, name: user.name };
+        } catch {
+          // DB unreachable — still allow admin login
+        }
 
-        return { id: user._id.toString(), email: user.email, name: user.name };
+        return { id: "admin", email: adminEmail, name: "Admin" };
       },
     }),
   ],
   pages: { signIn: "/login" },
   callbacks: {
-    authorized: ({ auth }) => !!auth?.user,
+    authorized: ({ auth, request }) => {
+      if (request.nextUrl.pathname.startsWith("/api/v1/")) return true;
+      return !!auth?.user;
+    },
     async jwt({ token, user }) {
       if (user) token.id = user.id;
       return token;

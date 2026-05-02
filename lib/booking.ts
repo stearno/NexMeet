@@ -1,10 +1,12 @@
 import { ObjectId } from "mongodb";
 import { availability, bookings, eventTypes, integrations, users } from "./collections";
-import { computeSlots } from "./availability";
+import { computeSlots, isTimeBookable } from "./availability";
 import { ymdInTz } from "./timezone";
 import { newManageToken } from "./tokens";
 import { createCalendarEvent, deleteCalendarEvent, getBusyTimes } from "./calendar";
 import { env } from "./env";
+import { dispatchWebhook } from "./webhook";
+import { formatInTimeZone } from "date-fns-tz";
 import type { BookingDoc, EventTypeDoc } from "./types";
 
 export class BookingError extends Error {
@@ -19,7 +21,8 @@ interface CreateBookingInput {
   guestName: string;
   guestEmail: string;
   guestTimezone: string;
-  customAnswers: Record<string, string>;
+  customAnswers: Record<string, string | string[]>;
+  alignToSlots?: boolean; // false = accept any time within availability (API use)
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<BookingDoc> {
@@ -53,18 +56,15 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingD
     },
   });
 
-  const candidates = computeSlots({
-    eventType: evt,
-    availability: avail,
-    busy,
-    now: new Date(),
-    bookingsPerDay: { [dayKey]: sameDayCount },
-  });
-  const free = candidates.some((s) => s.startUtc.getTime() === startUtc.getTime());
+  const slotOpts = { eventType: evt, availability: avail, busy, now: new Date() };
+  const free = input.alignToSlots === false
+    ? isTimeBookable(startUtc, slotOpts)
+    : computeSlots({ ...slotOpts, bookingsPerDay: { [dayKey]: sameDayCount } })
+        .some((s) => s.startUtc.getTime() === startUtc.getTime());
   if (!free) throw new BookingError("slot_taken", "Slot is no longer available");
 
   const manageToken = newManageToken();
-  const description = buildEventDescription(evt, input.guestName, input.customAnswers, manageToken);
+  const description = buildEventDescription(evt, input.guestName, input.customAnswers, manageToken, startUtc, endUtc, input.guestTimezone);
 
   const created = await createCalendarEvent(integration.composioUserId, integration.calendarId, {
     summary: `${evt.title} with ${input.guestName}`,
@@ -73,6 +73,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingD
     durationMinutes: evt.durationMinutes,
     attendees: [{ email: input.guestEmail, displayName: input.guestName }],
     withMeet: evt.location.type === "google_meet",
+    guestTimezone: input.guestTimezone,
   });
 
   const doc: BookingDoc = {
@@ -101,6 +102,9 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingD
     throw err;
   }
 
+  // fire-and-forget webhook dispatch
+  dispatchWebhook(evt, doc, "created").catch(() => {});
+
   return doc;
 }
 
@@ -115,6 +119,12 @@ export async function cancelBooking(token: string): Promise<BookingDoc> {
   const integration = await (await integrations()).findOne({ provider: "google_calendar", status: "ACTIVE" });
   if (integration) {
     await deleteCalendarEvent(integration.composioUserId, integration.calendarId, booking.googleEventId).catch(() => {});
+  }
+
+  const evt = await (await eventTypes()).findOne({ _id: booking.eventTypeId });
+  if (evt) {
+    const cancelledBooking = { ...booking, status: "cancelled", cancelledAt: new Date() } as BookingDoc;
+    dispatchWebhook(evt, cancelledBooking, "cancelled").catch(() => {});
   }
 
   return { ...booking, status: "cancelled", cancelledAt: new Date() };
@@ -145,31 +155,41 @@ export async function rescheduleBooking(token: string, newStartUtc: Date): Promi
     await deleteCalendarEvent(integration.composioUserId, integration.calendarId, original.googleEventId).catch(() => {});
   }
 
+  const evt = await (await eventTypes()).findOne({ _id: original.eventTypeId });
+  if (evt) {
+    dispatchWebhook(evt, newBooking, "rescheduled").catch(() => {});
+  }
+
   return newBooking;
 }
 
 function buildEventDescription(
   evt: EventTypeDoc,
   guestName: string,
-  answers: Record<string, string>,
+  answers: Record<string, string | string[]>,
   manageToken: string,
+  startUtc?: Date,
+  endUtc?: Date,
+  guestTimezone?: string,
 ): string {
   const lines: string[] = [];
-  lines.push(`${evt.title} with ${guestName}`);
-  lines.push("");
-  if (evt.description) {
-    lines.push(evt.description);
+
+  if (startUtc && endUtc && guestTimezone && guestTimezone !== "UTC") {
+    const tz = guestTimezone;
+    const dateStr = formatInTimeZone(startUtc, tz, "EEEE, MMMM d, yyyy");
+    const startStr = formatInTimeZone(startUtc, tz, "h:mm a");
+    const endStr = formatInTimeZone(endUtc, tz, "h:mm a");
+    lines.push(`Your local time: ${dateStr} · ${startStr} – ${endStr} (${tz})`);
     lines.push("");
   }
 
-  if (evt.customQuestions.length > 0) {
-    for (const q of evt.customQuestions) {
-      const value = answers[q.id];
-      if (value) {
-        lines.push(`${q.label}: ${value}`);
-      }
+  if (evt.description) {
+    const paragraphs = evt.description.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+    const lastParagraph = paragraphs.at(-1);
+    if (lastParagraph) {
+      lines.push(lastParagraph);
+      lines.push("");
     }
-    lines.push("");
   }
 
   if (evt.location.type === "phone") {

@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic";
 
-import { bookings } from "@/lib/collections";
+import { ObjectId } from "mongodb";
+import { bookings, users } from "@/lib/collections";
 import { BookingsTable } from "@/components/admin/BookingsTable";
+import { requireAdmin } from "@/lib/auth-helpers";
 
 const tabs = [
   { id: "upcoming", label: "Upcoming" },
@@ -14,6 +16,10 @@ export default async function BookingsPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
+  const session = await requireAdmin();
+  const user = await (await users()).findOne({ _id: new ObjectId(session.user.id) });
+  const adminTimezone = user?.defaultTimezone ?? "UTC";
+
   const sp = await searchParams;
   const tab = (sp.tab ?? "upcoming") as (typeof tabs)[number]["id"];
   const now = new Date();
@@ -62,7 +68,7 @@ export default async function BookingsPage({
         })}
       </nav>
 
-      <BookingsTable bookings={list} />
+      <BookingsTable bookings={list} adminTimezone={adminTimezone} />
     </div>
   );
 }

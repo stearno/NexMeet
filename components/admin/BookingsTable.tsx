@@ -1,6 +1,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { CalendarX } from "lucide-react";
 import type { BookingDoc } from "@/lib/types";
+import { CancelBookingButton } from "./CancelBookingButton";
 
 const statusStyle: Record<string, string> = {
   confirmed: "bg-success/15 text-success",
@@ -8,7 +9,7 @@ const statusStyle: Record<string, string> = {
   rescheduled: "bg-warning/15 text-warning",
 };
 
-export function BookingsTable({ bookings }: { bookings: BookingDoc[] }) {
+export function BookingsTable({ bookings, adminTimezone = "UTC" }: { bookings: BookingDoc[]; adminTimezone?: string }) {
   if (bookings.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-bg-elevated px-6 py-16 text-center">
@@ -29,7 +30,7 @@ export function BookingsTable({ bookings }: { bookings: BookingDoc[] }) {
       <ul className="divide-y divide-border">
         {bookings.map((b) => {
           const dt = new Date(b.startUtc);
-          const tz = b.guestTimezone || "UTC";
+          const tz = adminTimezone;
           return (
             <li
               key={b._id.toString()}
@@ -52,6 +53,9 @@ export function BookingsTable({ bookings }: { bookings: BookingDoc[] }) {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3 text-right">
+                {b.status === "confirmed" && new Date(b.startUtc) > new Date() && (
+                  <CancelBookingButton manageToken={b.manageToken} />
+                )}
                 <div>
                   <div className="font-mono text-[12px] tabular text-ink-soft">
                     {formatInTimeZone(dt, tz, "h:mm a")}

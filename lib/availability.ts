@@ -1,6 +1,6 @@
 import { addDays } from "date-fns";
 import type { AvailabilityDoc, EventTypeDoc } from "./types";
-import { dayOfWeekInTz, eachDayBetween, zonedDateAt } from "./timezone";
+import { dayOfWeekInTz, eachDayBetween, ymdInTz, zonedDateAt } from "./timezone";
 
 export interface Slot {
   startUtc: Date;
@@ -81,4 +81,37 @@ export function computeSlots(input: ComputeSlotsInput): Slot[] {
   }
 
   return slots;
+}
+
+export function isTimeBookable(startUtc: Date, input: Omit<ComputeSlotsInput, "bookingsPerDay">): boolean {
+  const { eventType, availability, busy, now } = input;
+  const tz = availability.timezone;
+
+  const earliestUtc = new Date(now.getTime() + eventType.rules.minNoticeMinutes * 60_000);
+  const latestUtc = addDays(now, eventType.rules.maxAdvanceDays);
+  if (startUtc < earliestUtc || startUtc > latestUtc) return false;
+
+  const endUtc = new Date(startUtc.getTime() + eventType.durationMinutes * 60_000);
+  const ymd = ymdInTz(startUtc, tz);
+
+  const override = availability.dateOverrides.find((o) => o.date === ymd);
+  let intervals: Array<{ start: string; end: string }>;
+  if (override) {
+    intervals = override.intervals;
+  } else {
+    const sample = zonedDateAt(ymd, "12:00", tz);
+    const dow = dayOfWeekInTz(sample, tz);
+    intervals = availability.weeklyHours.find((w) => w.dayOfWeek === dow)?.intervals ?? [];
+  }
+
+  const fitsInInterval = intervals.some((iv) => {
+    const ivStart = zonedDateAt(ymd, iv.start, tz);
+    const ivEnd = zonedDateAt(ymd, iv.end, tz);
+    return startUtc >= ivStart && endUtc <= ivEnd;
+  });
+  if (!fitsInInterval) return false;
+
+  const checkStart = new Date(startUtc.getTime() - eventType.rules.bufferBeforeMin * 60_000);
+  const checkEnd = new Date(endUtc.getTime() + eventType.rules.bufferAfterMin * 60_000);
+  return !busy.some((b) => overlaps(checkStart, checkEnd, b.start, b.end));
 }

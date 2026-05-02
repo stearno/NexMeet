@@ -48,9 +48,11 @@ export function ManagePanel({ token, slug }: { token: string; slug: string }) {
             setConfirming(true);
             return;
           }
-          start(async () => {
-            const res = await fetch(`/api/bookings/${token}`, { method: "DELETE" });
-            if (res.ok) setDone(true);
+          start(() => {
+            (async () => {
+              const res = await fetch(`/api/bookings/${token}`, { method: "DELETE" });
+              if (res.ok) setDone(true);
+            })();
           });
         }}
         disabled={pending}

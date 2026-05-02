@@ -6,6 +6,7 @@ import type {
   EventTypeDoc,
   AvailabilityDoc,
   BookingDoc,
+  WebhookLogDoc,
 } from "./types";
 
 export async function users(): Promise<Collection<UserDoc>> {
@@ -22,6 +23,9 @@ export async function availability(): Promise<Collection<AvailabilityDoc>> {
 }
 export async function bookings(): Promise<Collection<BookingDoc>> {
   return (await getDb()).collection<BookingDoc>("bookings");
+}
+export async function webhookLogs(): Promise<Collection<WebhookLogDoc>> {
+  return (await getDb()).collection<WebhookLogDoc>("webhook_logs");
 }
 
 let indexesEnsured = false;

@@ -3,12 +3,15 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { ArrowRight, CalendarPlus } from "lucide-react";
 import { formatInTimeZone } from "date-fns-tz";
+import { ObjectId } from "mongodb";
 import { bootstrap } from "@/lib/bootstrap";
-import { bookings, integrations } from "@/lib/collections";
+import { bookings, integrations, users } from "@/lib/collections";
+import { requireAdmin } from "@/lib/auth-helpers";
 import { KpiTile } from "@/components/admin/KpiTile";
 import { Button } from "@/components/ui/button";
 
 export default async function DashboardPage() {
+  const session = await requireAdmin();
   await bootstrap();
   const col = await bookings();
   const now = new Date();
@@ -16,6 +19,9 @@ export default async function DashboardPage() {
   weekStart.setDate(now.getDate() - now.getDay());
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const sevenAhead = new Date(now.getTime() + 7 * 24 * 3600_000);
+
+  const adminUser = await (await users()).findOne({ _id: new ObjectId(session.user.id) });
+  const adminTimezone = adminUser?.defaultTimezone ?? "UTC";
 
   const [thisWeek, next7, thisMonth, upcoming, integ] = await Promise.all([
     col.countDocuments({ status: "confirmed", startUtc: { $gte: weekStart, $lt: now } }),
@@ -94,10 +100,10 @@ export default async function DashboardPage() {
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-md border border-border bg-bg-elevated">
                         <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-muted">
-                          {formatInTimeZone(dt, b.guestTimezone || "UTC", "MMM")}
+                          {formatInTimeZone(dt, adminTimezone, "MMM")}
                         </span>
                         <span className="font-mono text-[13px] font-medium leading-none tabular text-ink">
-                          {formatInTimeZone(dt, b.guestTimezone || "UTC", "d")}
+                          {formatInTimeZone(dt, adminTimezone, "d")}
                         </span>
                       </span>
                       <div className="min-w-0">
@@ -107,10 +113,10 @@ export default async function DashboardPage() {
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="font-mono text-[12px] tabular text-ink-soft">
-                        {formatInTimeZone(dt, b.guestTimezone || "UTC", "h:mm a")}
+                        {formatInTimeZone(dt, adminTimezone, "h:mm a")}
                       </div>
                       <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                        {formatInTimeZone(dt, b.guestTimezone || "UTC", "zzz")}
+                        {formatInTimeZone(dt, adminTimezone, "zzz")}
                       </div>
                     </div>
                   </li>
