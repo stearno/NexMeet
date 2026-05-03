@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { Wordmark } from "@/components/brand/Wordmark";
 import { LoginForm } from "./login-form";
 
