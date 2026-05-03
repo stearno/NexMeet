@@ -12,10 +12,10 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-# Ensure TLS 1.2+ is available for MongoDB Atlas
-RUN apk add --no-cache ca-certificates curl && update-ca-certificates
-# Download ISRG Root X1 and Let's Encrypt roots that Atlas may use
-RUN curl -fsSL -o /usr/local/share/ca-certificates/isrg-root-x1.pem https://letsencrypt.org/certs/isrgrootx1.pem && update-ca-certificates
+# ca-certificates includes ISRG Root X1 and DigiCert roots Atlas uses.
+# NODE_EXTRA_CA_CERTS makes Node.js use the system store (it ignores it by default).
+RUN apk add --no-cache ca-certificates && update-ca-certificates
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
