@@ -17,7 +17,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PROCESS4HIGHROI",
   description: "Schedule a meeting.",
-  icons: { icon: "/icon.svg" },
   manifest: "/manifest.json",
 };
 
